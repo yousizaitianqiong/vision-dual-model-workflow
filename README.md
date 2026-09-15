@@ -1,8 +1,8 @@
-# 企业内网双模型视觉工作流脱敏 Demo
+# 双模型视觉工作流脱敏 Demo
 
 一个面向视觉大模型私有化部署与 AI 工作流编排的可复现最小示例。
 
-本仓库来自一个企业内网道路监测项目的脱敏技术整理，公开内容只用于展示工程方法和接口契约，不代表企业官方发布，也不包含企业数据、模型权重、生产配置或真实业务结果。
+本仓库来自一个道路监测视觉项目的脱敏技术整理，公开内容只用于展示工程方法和接口契约，不代表任何企业官方发布，也不包含企业数据、模型权重、生产配置或真实业务结果。
 
 [![CI](https://github.com/yousizaitianqiong/vision-dual-model-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/yousizaitianqiong/vision-dual-model-workflow/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -11,10 +11,10 @@
 
 ## 项目定位
 
-真实项目面向企业内网道路监测场景，工程链路包括：
+真实项目面向道路监测场景，工程链路包括：
 
 - 上线前租用服务器完成模型选型、冒烟测试和准确率检验；
-- 验证通过后迁移至双 RTX A5000 离线环境，完成视觉模型私有化部署并正式投用；
+- 验证通过后迁移至离线私有化环境，完成视觉模型部署并正式投用；
 - 以 SenseNova-SI-2B 负责快速初筛，以 Qwen3-VL-8B 负责独立复核；
 - 使用 Dify 1.17.x Workflow DSL 编排媒体输入、自定义提示词、双模型推理和结果汇总；
 - 使用 FastAPI + FFmpeg 对图片和视频进行媒体预处理；
