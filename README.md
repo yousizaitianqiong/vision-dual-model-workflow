@@ -2,7 +2,7 @@
 
 一个面向视觉大模型私有化部署与 AI 工作流编排的可复现最小示例。
 
-本仓库来自一个道路监测视觉项目的脱敏技术整理，公开内容只用于展示工程方法和接口契约，不代表任何企业官方发布，也不包含企业数据、模型权重、生产配置或真实业务结果。
+本仓库来自一个道路监测视觉项目的脱敏技术整理，公开内容只用于展示工程方法和接口契约，不代表任何组织官方发布，也不包含业务数据、模型权重、生产配置或真实业务结果。
 
 [![CI](https://github.com/yousizaitianqiong/vision-dual-model-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/yousizaitianqiong/vision-dual-model-workflow/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -126,7 +126,7 @@ scripts/
 - Demo 不进行音频分析，不代表实时视频流处理；
 - Mock 服务只验证文件链路、模型协议和异常处理，不代表真实模型准确率；
 - 私有化部署、Docker/NVIDIA GPU、systemd、离线依赖和内网访问控制属于原项目工程背景，公开仓库只保留脱敏说明；
-- 不上传企业内网地址、账号、口令、模型权重、业务媒体或未经证实的性能数字。
+- 不上传内部地址、账号、口令、模型权重、业务媒体或未经证实的性能数字。
 
 ## 后续可验证方向
 
@@ -141,4 +141,4 @@ scripts/
 
 新增 Demo 代码和文档采用 MIT License。真实企业项目的业务代码、数据、模型权重和部署配置不属于本仓库授权范围。
 
-安全问题请参阅 SECURITY.md，不要在公开 Issue 中提交凭据、内网地址或业务数据。
+安全问题请参阅 SECURITY.md，不要在公开 Issue 中提交凭据、内部地址或业务数据。
