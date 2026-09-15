@@ -1,0 +1,501 @@
+app:
+  description: "图片/视频输入、自定义提示词；视频先抽取最多 8 帧合成联系表，再由 SenseNova 初筛、Qwen3-VL 复核。"
+  icon: "🧭"
+  icon_background: "#E0F2FE"
+  icon_type: emoji
+  mode: workflow
+  name: "视觉双模型演示"
+  use_icon_as_answer_icon: false
+dependencies:
+  - current_identifier: null
+    type: marketplace
+    value:
+      marketplace_plugin_unique_identifier: "langgenius/openai_api_compatible:0.0.66@51801b51069b2578c3fcf6d38edc45c45efd8b7ef4fdb25f096bd84d4f95a53d"
+kind: app
+version: "0.7.0"
+workflow:
+  conversation_variables: []
+  environment_variables:
+    - id: "4a7cc5cf-4b4f-4fa2-9e1c-2d6e4c3e0a01"
+      name: qwen_vision_model
+      selector:
+        - env
+        - qwen_vision_model
+      value:
+        provider: openai_api_compatible
+        name: qwen3-vl-8b
+        mode: chat
+        completion_params:
+          temperature: 0.2
+      value_type: llm
+      description: "Qwen3-VL-8B 复核模型；模型供应商地址由部署环境配置。"
+    - id: "4a7cc5cf-4b4f-4fa2-9e1c-2d6e4c3e0a02"
+      name: sensenova_vision_model
+      selector:
+        - env
+        - sensenova_vision_model
+      value:
+        provider: openai_api_compatible
+        name: sensenova-si-2b
+        mode: chat
+        completion_params:
+          temperature: 0.1
+      value_type: llm
+      description: "SenseNova-SI-2B 初筛模型；模型供应商地址由部署环境配置。"
+  features:
+    file_upload:
+      allowed_file_extensions:
+        - ".JPG"
+        - ".JPEG"
+        - ".PNG"
+        - ".WEBP"
+        - ".GIF"
+        - ".MP4"
+        - ".MOV"
+        - ".AVI"
+        - ".WEBM"
+        - ".MKV"
+      allowed_file_types:
+        - image
+        - video
+      allowed_file_upload_methods:
+        - local_file
+      enabled: true
+      fileUploadConfig:
+        attachment_image_file_size_limit: 10
+        audio_file_size_limit: 50
+        batch_count_limit: 1
+        file_size_limit: 100
+        file_upload_limit: 1
+        image_file_batch_limit: 1
+        image_file_size_limit: 10
+        single_chunk_attachment_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 1
+      image:
+        enabled: true
+        number_limits: 1
+        transfer_methods:
+          - local_file
+      number_limits: 1
+    opening_statement: "上传一张图片或一个视频，输入分析提示词。视频会先抽取最多 8 帧合成联系表，再由 SenseNova 初筛、Qwen3-VL 复核。"
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions:
+      - "请描述画面中的主要对象、场景和动作。"
+      - "请重点检查画面中的安全风险或异常情况。"
+      - "请比较两个模型的识别结果，并指出可能的差异。"
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    edges:
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: start
+          targetType: http-request
+        id: "start-media-prepare"
+        source: start
+        sourceHandle: source
+        target: media_prepare
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: http-request
+          targetType: llm
+        id: "media-prepare-sensenova"
+        source: media_prepare
+        sourceHandle: source
+        target: sensenova_vision
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: llm
+          targetType: llm
+        id: "sensenova-qwen"
+        source: sensenova_vision
+        sourceHandle: source
+        target: qwen_vision
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: llm
+          targetType: template-transform
+        id: "qwen-merge"
+        source: qwen_vision
+        sourceHandle: source
+        target: merge
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: template-transform
+          targetType: end
+        id: "merge-end"
+        source: merge
+        sourceHandle: source
+        target: end
+        targetHandle: target
+        type: custom
+        zIndex: 0
+    nodes:
+      - data:
+          desc: "接收演示用的图片/视频、用户提示词和输出格式。"
+          selected: false
+          title: "输入"
+          type: start
+          variables:
+            - allowed_file_extensions:
+                - ".JPG"
+                - ".JPEG"
+                - ".PNG"
+                - ".WEBP"
+                - ".GIF"
+                - ".MP4"
+                - ".MOV"
+                - ".AVI"
+                - ".WEBM"
+                - ".MKV"
+              allowed_file_types:
+                - image
+                - video
+              allowed_file_upload_methods:
+                - local_file
+              default: ""
+              hide: false
+              hint: "图片会先规范化；视频会均匀抽取最多 8 帧并合成为联系表后再分析。"
+              label: "图片或视频"
+              options: []
+              placeholder: "选择一个图片或视频文件"
+              required: true
+              type: file
+              variable: media
+            - default: "请描述画面中的主要对象、场景、动作和异常，并给出你的判断依据。"
+              hint: "可替换为任意视觉分析任务，例如缺陷检测、安防巡检或内容审核。"
+              label: "自定义提示词"
+              max_length: 4000
+              options: []
+              placeholder: "输入希望两个模型重点分析的内容"
+              required: true
+              type: text-input
+              variable: prompt
+            - default: "详细对比"
+              hint: "控制最终汇总节点的展示方式。"
+              label: "输出格式"
+              options:
+                - "详细对比"
+                - "精简结论"
+                - "原始结果"
+              placeholder: "选择输出展示方式"
+              required: true
+              type: select
+              variable: output_format
+        height: 300
+        id: start
+        position:
+          x: 80
+          y: 260
+        positionAbsolute:
+          x: 80
+          y: 260
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+      - data:
+          desc: "图片规范化；视频使用 FFmpeg 均匀抽取最多 8 帧并合成为联系表。"
+          title: "媒体预处理"
+          type: http-request
+          method: POST
+          url: "http://media-preprocess:8002/v1/media/prepare"
+          authorization:
+            type: no-auth
+          headers: ""
+          params: ""
+          body:
+            type: form-data
+            data:
+              - key: file
+                type: file
+                file:
+                  - start
+                  - media
+              - key: max_frames
+                type: text
+                value: "8"
+          timeout:
+            connect: 10
+            read: 180
+            write: 30
+          retry_config:
+            enabled: true
+            max_retries: 1
+            retry_interval: 1000
+            exponential_backoff:
+              enabled: false
+              multiplier: 2
+              max_interval: 10000
+        height: 170
+        id: media_prepare
+        position:
+          x: 440
+          y: 260
+        positionAbsolute:
+          x: 440
+          y: 260
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+      - data:
+          desc: "调用本地 Qwen3-VL-8B，对媒体预处理后的图片或视频联系表和 SenseNova 初筛结果进行复核。"
+          model:
+            completion_params:
+              temperature: 0.2
+            mode: chat
+            name: qwen3-vl-8b
+            provider: openai_api_compatible
+          model_selector:
+            - env
+            - qwen_vision_model
+          memory:
+            enabled: false
+            window:
+              enabled: false
+              size: 50
+          prompt_template:
+            - id: "qwen-system"
+              role: system
+              text: |
+                你是 Qwen3-VL 本地视觉复核模型。
+                你必须独立检查视觉输入（图片或视频抽帧联系表），再对照初筛模型的结果进行复核。
+                不要盲目接受初筛结论；如果初筛错误、遗漏或证据不足，请明确指出并修正。
+                只能陈述图片中可以观察或合理推断的内容，无法确认时要说明不确定性。
+            - id: "qwen-user"
+              role: user
+              text: |
+                用户自定义提示词：
+                {{#start.prompt#}}
+
+                SenseNova 初筛结果：
+                {{#sensenova_vision.text#}}
+
+                输出偏好：
+                {{#start.output_format#}}
+
+                请按以下结构完成复核：
+                1. 初筛结论是否成立；
+                2. 初筛中正确、遗漏或错误的部分；
+                3. 你从视觉输入观察到的关键证据；
+                4. 最终复核结论；
+                5. 建议的后续处理。
+          vision:
+            enabled: true
+            configs:
+              detail: high
+              variable_selector:
+                - media_prepare
+                - files
+          context:
+            enabled: false
+            variable_selector: []
+          structured_output:
+            enabled: false
+          retry_config:
+            enabled: true
+            max_retries: 1
+            retry_interval: 1000
+            exponential_backoff:
+              enabled: false
+              multiplier: 2
+              max_interval: 10000
+          selected: false
+          title: "Qwen3-VL-8B 复核"
+          type: llm
+          variables: []
+        height: 270
+        id: qwen_vision
+        position:
+          x: 1160
+          y: 260
+        positionAbsolute:
+          x: 1160
+          y: 260
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+      - data:
+          desc: "调用本地 SenseNova-SI-2B，对媒体预处理后的图片或视频联系表完成快速初筛。"
+          model:
+            completion_params:
+              temperature: 0.1
+            mode: chat
+            name: sensenova-si-2b
+            provider: openai_api_compatible
+          model_selector:
+            - env
+            - sensenova_vision_model
+          memory:
+            enabled: false
+            window:
+              enabled: false
+              size: 50
+          prompt_template:
+            - id: "sensenova-system"
+              role: system
+              text: |
+                你是 SenseNova-SI 本地视觉初筛模型。
+                请快速、客观地检查视觉输入（图片或视频抽帧联系表），找出与用户提示词相关的对象、风险和异常。
+                只能陈述图片中可以观察或合理推断的内容，无法确认时要说明不确定性。
+            - id: "sensenova-user"
+              role: user
+              text: |
+                用户自定义提示词：
+                {{#start.prompt#}}
+
+                输出偏好：
+                {{#start.output_format#}}
+
+                请严格按以下结构输出初筛结果，供后续 Qwen3-VL 复核：
+                【初筛结论】
+                【观察到的对象或风险】
+                【判断依据】
+                【置信度】
+                【需要复核的疑点】
+          vision:
+            enabled: true
+            configs:
+              detail: high
+              variable_selector:
+                - media_prepare
+                - files
+          context:
+            enabled: false
+            variable_selector: []
+          structured_output:
+            enabled: false
+          retry_config:
+            enabled: true
+            max_retries: 1
+            retry_interval: 1000
+            exponential_backoff:
+              enabled: false
+              multiplier: 2
+              max_interval: 10000
+          selected: false
+          title: "SenseNova-SI-2B 初筛"
+          type: llm
+          variables: []
+        height: 270
+        id: sensenova_vision
+        position:
+          x: 800
+          y: 260
+        positionAbsolute:
+          x: 800
+          y: 260
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+      - data:
+          desc: "根据输出格式展示 SenseNova 初筛和 Qwen 复核结果。"
+          selected: false
+          template: |-
+            {% if output_format == '精简结论' %}
+            ## 最终复核结论
+            {{ review_result }}
+
+            {% elif output_format == '原始结果' %}
+            ## SenseNova 初筛（原始结果）
+            {{ initial_screening }}
+
+            ## Qwen 复核（原始结果）
+            {{ review_result }}
+            {% else %}
+            # 双模型视觉复核结果
+
+            ## 一、SenseNova 初筛
+            {{ initial_screening }}
+
+            ## 二、Qwen3-VL 复核
+            {{ review_result }}
+
+            ## 三、最终处理建议
+            以上最终结论以 Qwen3-VL 复核结果为准；如初筛与复核不一致，以复核模型指出的证据和修正结论为准。
+            {% endif %}
+          title: "汇总输出"
+          type: template-transform
+          variables:
+            - value_selector:
+                - sensenova_vision
+                - text
+              value_type: string
+              variable: initial_screening
+            - value_selector:
+                - qwen_vision
+                - text
+              value_type: string
+              variable: review_result
+            - value_selector:
+                - start
+                - output_format
+              value_type: string
+              variable: output_format
+        height: 290
+        id: merge
+        position:
+          x: 1520
+          y: 260
+        positionAbsolute:
+          x: 1520
+          y: 260
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+      - data:
+          outputs:
+            - value_selector:
+                - merge
+                - output
+              value_type: string
+              variable: answer
+          title: "演示结果"
+          type: end
+        height: 120
+        id: end
+        position:
+          x: 1880
+          y: 260
+        positionAbsolute:
+          x: 1880
+          y: 260
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244

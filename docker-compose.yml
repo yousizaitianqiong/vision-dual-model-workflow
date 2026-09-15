@@ -1,0 +1,29 @@
+services:
+  media-preprocess:
+    build: .
+    command: ["python", "-m", "services.media_preprocess_server"]
+    environment:
+      MEDIA_PREPROCESS_HOST: "0.0.0.0"
+      MEDIA_PREPROCESS_PORT: "8002"
+    ports:
+      - "8002:8002"
+
+  mock-sensenova:
+    build: .
+    command: ["python", "-m", "services.mock_openai_vision_server"]
+    environment:
+      MOCK_MODEL_NAME: "sensenova-si-2b"
+      MOCK_MODEL_ROLE: "screening"
+      MOCK_MODEL_PORT: "8001"
+    ports:
+      - "8001:8001"
+
+  mock-qwen:
+    build: .
+    command: ["python", "-m", "services.mock_openai_vision_server"]
+    environment:
+      MOCK_MODEL_NAME: "qwen3-vl-8b"
+      MOCK_MODEL_ROLE: "review"
+      MOCK_MODEL_PORT: "8003"
+    ports:
+      - "8003:8003"
