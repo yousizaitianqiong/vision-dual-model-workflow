@@ -138,11 +138,23 @@ async def chat_completions(request: Request):
     except ValueError:
         return JSONResponse(status_code=400, content={"error": {"message": "请求必须是 JSON"}})
 
+    if not isinstance(payload, dict):
+        return JSONResponse(
+            status_code=422,
+            content={"error": {"message": "请求必须是 JSON 对象"}},
+        )
+
     messages = payload.get("messages")
     if not isinstance(messages, list):
         return JSONResponse(
             status_code=422,
             content={"error": {"message": "messages 必须是数组"}},
+        )
+
+    if any(not isinstance(message, dict) for message in messages):
+        return JSONResponse(
+            status_code=422,
+            content={"error": {"message": "messages 中的每一项必须是对象"}},
         )
 
     request_id = f"chatcmpl-{uuid.uuid4().hex}"
