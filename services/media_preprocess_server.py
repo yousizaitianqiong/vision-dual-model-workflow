@@ -1,6 +1,6 @@
 """脱敏视觉工作流 Demo 的媒体预处理服务。
 
-图片会被规范化为 JPEG；视频会使用 FFmpeg 均匀抽取最多 8 帧，生成联系表。
+图片会被规范化为 JPEG；视频会按时间采样最多 8 个实际帧，生成联系表。
 服务只处理上传文件，不接受 URL 或任意命令参数。
 """
 
@@ -12,6 +12,7 @@ import math
 import os
 import subprocess
 import tempfile
+from bisect import bisect_left
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -113,47 +114,113 @@ def _video_duration(path: Path) -> float:
     return duration
 
 
-def _extract_frame(path: Path, timestamp: float) -> Image.Image:
+def _video_frame_timestamps(path: Path) -> list[float]:
     result = _run(
         [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
+            "ffprobe",
+            "-v",
             "error",
-            "-ss",
-            f"{timestamp:.3f}",
-            "-i",
+            "-select_streams",
+            "v:0",
+            "-show_frames",
+            "-show_entries",
+            "frame=best_effort_timestamp_time",
+            "-of",
+            "json",
             str(path),
-            "-frames:v",
-            "1",
-            "-f",
-            "image2pipe",
-            "-vcodec",
-            "mjpeg",
-            "pipe:1",
         ],
-        timeout=30,
+        timeout=20,
     )
     try:
-        with Image.open(io.BytesIO(result.stdout)) as frame:
-            return frame.convert("RGB").copy()
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"无法读取视频帧（{timestamp:.2f}s）") from exc
+        frames = json.loads(result.stdout.decode("utf-8"))["frames"]
+        timestamps = [float(frame["best_effort_timestamp_time"]) for frame in frames]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="无法读取视频帧时间戳") from exc
+    if (
+        not timestamps
+        or any(not math.isfinite(timestamp) for timestamp in timestamps)
+        or any(current < previous for previous, current in zip(timestamps, timestamps[1:]))
+    ):
+        raise HTTPException(status_code=422, detail="视频帧时间戳无效")
+    # 保留解码帧的原始顺序和索引；标签从首帧开始计时。
+    relative = [timestamp - timestamps[0] for timestamp in timestamps]
+    if any(not math.isfinite(timestamp) for timestamp in relative):
+        raise HTTPException(status_code=422, detail="视频帧时间戳无效")
+    return relative
+
+
+def _sample_frame_indices(timestamps: list[float], frame_count: int) -> list[int]:
+    if frame_count == 1:
+        return [0]
+    indices: list[int] = []
+    for index in range(frame_count):
+        target = timestamps[-1] * (index / (frame_count - 1))
+        nearest = min(bisect_left(timestamps, target), len(timestamps) - 1)
+        if nearest > 0:
+            before = abs(target - timestamps[nearest - 1])
+            after = abs(timestamps[nearest] - target)
+            if before <= after or math.isclose(before, after, rel_tol=0, abs_tol=1e-9):
+                nearest -= 1
+        if not indices or indices[-1] != nearest:
+            indices.append(nearest)
+    return indices
+
+
+def _extract_frames(path: Path, indices: list[int]) -> list[Image.Image]:
+    # 按实际解码索引一次提取，避免时间寻址越过末帧；禁止输出端补帧。
+    # 分辨率改变时也不重建过滤器，否则 select 的帧序号会从零重新计数。
+    selection = "+".join(f"eq(n\\,{index})" for index in indices)
+    filters = ",".join(
+        [
+            f"select={selection}",
+            "scale=480:300:force_original_aspect_ratio=decrease:eval=frame:flags=lanczos",
+            "pad=480:300:(ow-iw)/2:(oh-ih)/2:color=0x181818:eval=frame",
+        ]
+    )
+    with tempfile.TemporaryDirectory(prefix="vision_frames_") as temp_dir:
+        directory = Path(temp_dir)
+        _run(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error",
+                "-reinit_filter", "0", "-i", str(path), "-map", "0:v:0",
+                "-vf", filters, "-fps_mode", "passthrough",
+                "-frames:v", str(len(indices)), "-q:v", "2",
+                str(directory / "frame-%02d.jpg"),
+            ],
+            timeout=30,
+        )
+        paths = sorted(directory.glob("frame-*.jpg"))
+        if len(paths) != len(indices):
+            raise HTTPException(status_code=422, detail="视频抽帧数量与采样计划不一致")
+        images: list[Image.Image] = []
+        try:
+            for frame_path in paths:
+                with Image.open(frame_path) as frame:
+                    images.append(
+                        ImageOps.contain(
+                            frame.convert("RGB"), (FRAME_WIDTH, FRAME_HEIGHT),
+                            method=Image.Resampling.LANCZOS,
+                        )
+                    )
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="无法读取抽取的视频帧") from exc
+        return images
 
 
 def _contact_sheet(path: Path, duration: float, requested_frames: int) -> tuple[bytes, int]:
-    frame_count = min(MAX_FRAMES, max(1, requested_frames, 1))
-    frame_count = min(frame_count, max(1, math.ceil(duration)))
-    # 给 FFmpeg 的末帧解码留出安全边界，避免短视频在 duration 附近取不到完整帧。
-    end_time = max(0.0, duration - 0.25)
-    timestamps = [0.0] if frame_count == 1 else [end_time * i / (frame_count - 1) for i in range(frame_count)]
+    source_timestamps = _video_frame_timestamps(path)
+    frame_count = min(
+        MAX_FRAMES, max(1, requested_frames),
+        max(1, math.ceil(duration)), len(source_timestamps),
+    )
+    indices = _sample_frame_indices(source_timestamps, frame_count)
+    timestamps = [source_timestamps[index] for index in indices]
+    frames = _extract_frames(path, indices)
 
     canvas_height = (FRAME_HEIGHT + LABEL_HEIGHT) * 2
     canvas = Image.new("RGB", (FRAME_COLUMNS * FRAME_WIDTH, canvas_height), (24, 24, 24))
     draw = ImageDraw.Draw(canvas)
-    for index, timestamp in enumerate(timestamps):
-        frame = _extract_frame(path, timestamp)
-        frame = ImageOps.contain(frame, (FRAME_WIDTH, FRAME_HEIGHT), method=Image.Resampling.LANCZOS)
+    for index, (timestamp, frame) in enumerate(zip(timestamps, frames)):
         x = (index % FRAME_COLUMNS) * FRAME_WIDTH
         y = (index // FRAME_COLUMNS) * (FRAME_HEIGHT + LABEL_HEIGHT)
         draw.rectangle((x, y, x + FRAME_WIDTH, y + LABEL_HEIGHT - 1), fill=(0, 0, 0))

@@ -1,8 +1,8 @@
 # 双模型视觉工作流脱敏 Demo
 
-一个面向视觉大模型私有化部署与 AI 工作流编排的可复现最小示例。
+一个面向视觉媒体预处理、Mock 接口和 AI 工作流编排的最小示例。
 
-本仓库来自一个道路监测视觉项目的脱敏技术整理，公开内容只用于展示工程方法和接口契约，不代表任何组织官方发布，也不包含业务数据、模型权重、生产配置或真实业务结果。
+本仓库面向道路监测等视觉输入场景，公开内容只用于展示工程方法和接口契约，不代表任何组织官方发布，不提供业务数据、模型权重、生产配置或真实业务结果。
 
 [![CI](https://github.com/yousizaitianqiong/vision-dual-model-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/yousizaitianqiong/vision-dual-model-workflow/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -11,18 +11,15 @@
 
 ## 项目定位
 
-真实项目面向道路监测场景，工程链路包括：
+公开代码包含 FastAPI + Pillow + FFmpeg 媒体预处理服务、两个 OpenAI 风格 Mock 服务，以及目标为 Dify 1.17.x 的 Workflow DSL 示例。视频预处理生成最多 8 帧、带帧序号和时间标签的 JPEG 联系表。
 
-- 上线前租用服务器完成模型选型、冒烟测试和准确率检验；
-- 验证通过后迁移至离线私有化环境，完成视觉模型部署并正式投用；
-- 以 SenseNova-SI-2B 负责快速初筛，以 Qwen3-VL-8B 负责独立复核；
-- 使用 Dify 1.17.x Workflow DSL 编排媒体输入、自定义提示词、双模型推理和结果汇总；
-- 使用 FastAPI + FFmpeg 对图片和视频进行媒体预处理；
-- 视频按时间均匀抽取最多 8 帧，合成为带帧序号和时间标签的 JPEG 联系表。
+当前 Compose 和 DSL 使用 `sensenova-si-2b` 作为初筛 Mock 别名，使用 `qwen3-vl-8b` 作为复核 Mock 别名。它们不加载真实权重，别名不证明真实模型型号、接口兼容性、授权或部署状态。“Qwen 初筛 + 第二模型复核”仍是待验证方案，与当前 Demo 的角色安排不同，不能写成已经实现。
 
-公开 Demo 使用 Mock 模型服务复现协议和工作流边界，不加载 Qwen3-VL 或 SenseNova 的真实权重。真实项目中的准确率、吞吐量、延迟、显存占用和业务数据均不在本仓库中公开。
+现有材料不足以确认租用服务器冒烟测试、准确率检验、真实模型部署或正式投用。Dify 目前仅做 YAML 静态契约检查，尚未验证实机导入和端到端运行。验证方法与边界见 [验证说明](docs/verification.md)。
 
 ## 数据流
+
+以下为 DSL 描述的预期路径，尚未完成 Dify 端到端验证：
 
 ~~~text
 图片/短视频 + 自定义提示词
@@ -30,13 +27,13 @@
           v
 FastAPI / FFmpeg 媒体预处理
   图片：EXIF 校正、RGB 转换、JPEG 规范化
-  视频：最多 8 帧均匀抽取、时间标签、联系表
+  视频：按时间采样最多 8 个实际帧、时间标签、联系表
           |
           v
-SenseNova-SI-2B 初筛
+sensenova-si-2b 初筛 Mock
           |
           v
-Qwen3-VL-8B 复核
+qwen3-vl-8b 复核 Mock
           |
           v
 Dify 模板汇总：详细对比 / 精简结论 / 原始结果
@@ -44,7 +41,7 @@ Dify 模板汇总：详细对比 / 精简结论 / 原始结果
 
 ## 快速运行
 
-要求：Docker、Docker Compose 和可用的 FFmpeg 运行环境。
+要求：Docker 和 Docker Compose；镜像构建会安装 FFmpeg。以下命令用于尝试启动 Demo，CI 的 `docker compose config` 只校验配置，不证明镜像已构建或容器已成功启动。
 
 ~~~bash
 docker compose up --build
@@ -58,22 +55,22 @@ curl http://localhost:8001/v1/models
 curl http://localhost:8003/v1/models
 ~~~
 
-媒体预处理服务只接收上传文件，不接受任意 URL 或命令参数。Mock 模型服务只返回用于联调的确定性示例文本。
+媒体预处理服务只接收上传文件，不接受任意 URL 或命令参数。Mock 模型服务只从请求中提取文本字段并返回示例文本，不解析或校验图片；Mock 回答不能证明视觉输入已到达。
 
 ## Dify 工作流导入
 
-工作流文件位于 workflow/dify-vision-dual-model-demo.yml，结构与 Dify 1.17.x Workflow DSL 对齐，包含 6 个节点和 5 条边：
+工作流文件位于 `workflow/dify-vision-dual-model-demo.yml`，以 Dify 1.17.x 为目标，包含 6 个节点和 5 条边；目标版本兼容性尚未经实机导入验证：
 
 1. 输入：图片或视频、自定义提示词、输出格式；
 2. 媒体预处理：调用 media-preprocess 服务；
-3. SenseNova-SI-2B 初筛；
-4. Qwen3-VL-8B 复核；
+3. `sensenova-si-2b` 初筛 Mock；
+4. `qwen3-vl-8b` 复核 Mock；
 5. 模板汇总；
 6. 结果输出。
 
-导入后，在 Dify 的 OpenAI API Compatible 供应商中配置两个模型。公开 Demo 可分别指向 mock-sensenova:8001/v1 和 mock-qwen:8003/v1；真实部署时应由部署环境绑定经过授权的模型服务端点。Dify 容器需要加入能够解析 media-preprocess 服务名的网络。
+Compose 只包含媒体服务和两个 Mock，不启动 Dify。尝试导入时，在独立 Dify 实例的 OpenAI API Compatible 供应商中配置两个模型别名。公开 Demo 可分别指向 `mock-sensenova:8001/v1` 和 `mock-qwen:8003/v1`。Dify 容器需要加入能够解析这些服务名的网络。当前 DSL 有 HTTP 节点，没有独立的 IF-ELSE 节点；模板内部的条件格式化不等同于工作流分支验证。
 
-完整说明见 docs/dify-import.md。
+候选导入步骤和待验收项见 [Dify 导入说明](docs/dify-import.md)。
 
 ## 公开接口
 
@@ -87,9 +84,9 @@ POST /v1/media/prepare
 POST 接口使用 multipart/form-data：
 
 - file：必填，图片或视频文件；
-- max_frames：可选，范围为 1–8，默认 8。
+- max_frames：可选整数，默认 8；小于 1 按 1 处理，大于 8 按 8 处理。
 
-图片返回规范化 JPEG。视频返回 JPEG 联系表，并通过响应头给出来源类型和实际帧数。默认单文件上限为 100 MB，视频时长上限为 120 秒。
+图片返回规范化 JPEG。视频在首帧到末帧的时间范围内均匀布点，选择最近的实际可解码帧并去重，返回 JPEG 联系表。实际帧数还受视频时长和可用帧数限制，可能少于 `max_frames`；标签时间相对首帧计算。响应头给出来源类型和实际帧数。默认单文件上限为 100 MB，视频时长上限为 120 秒。
 
 ### OpenAI 兼容 Mock 服务
 
@@ -99,7 +96,7 @@ GET  /v1/models
 POST /v1/chat/completions
 ~~~
 
-chat completions 支持 stream=false 的 JSON 响应和 stream=true 的 SSE 响应，便于验证 Dify 与 OpenAI 风格服务之间的协议适配。
+chat completions 支持 `stream=false` 的 JSON 响应和 `stream=true` 的 SSE 响应，测试覆盖这些接口响应及输入错误。Dify 与供应商插件之间的实际协议适配仍需端到端验证。
 
 ## 项目结构
 
@@ -111,28 +108,32 @@ workflow/
   dify-vision-dual-model-demo.yml  脱敏 Dify Workflow DSL
 tests/
   test_media_preprocess.py         媒体处理测试
+  test_media_ffmpeg.py              合成视频与真实 FFmpeg 接口回归
   test_mock_openai_vision.py       JSON/SSE 协议测试
 docs/
   architecture.md                  架构与数据流
   deployment-boundaries.md         生产部署边界
   dify-import.md                   Dify 导入说明
+  verification.md                  验证方法与证据边界
 scripts/
-  check_public_surface.py          公开内容安全扫描
+  check_public_surface.py          公开内容规则扫描
 ~~~
 
 ## 工程边界
 
-- 视频能力是均匀抽取最多 8 帧并分析联系表，不是逐帧完整视频理解；
+- 视频预处理只生成最多 8 帧的联系表；Mock 不分析联系表，也不提供逐帧完整视频理解；
 - Demo 不进行音频分析，不代表实时视频流处理；
-- Mock 服务只验证文件链路、模型协议和异常处理，不代表真实模型准确率；
-- 私有化部署、Docker/NVIDIA GPU、systemd、离线依赖和内网访问控制属于原项目工程背景，公开仓库只保留脱敏说明；
+- Mock 测试验证请求结构、文本处理、JSON/SSE 响应和部分异常处理，不证明视觉文件链路、真实模型准确率或生产稳定性；
+- 私有化部署、GPU 推理、离线依赖和内网访问控制需要独立验证，仓库中的部署建议不是完成记录；
+- 公开内容扫描仅检查脚本列出的规则，并跳过部分文件；扫描通过不保证不存在任何秘密或业务内容；
 - 不上传内部地址、账号、口令、模型权重、业务媒体或未经证实的性能数字。
 
 ## 后续可验证方向
 
 - 为更多图片格式和视频编码补充回归样本；
-- 在不包含业务数据的前提下补充可复现的合成媒体夹具；
-- 将真实模型端点替换为经过授权的本地 OpenAI 兼容服务；
+- 扩展不含业务数据的合成媒体回归场景；
+- 完成 Dify 实机导入、媒体文件传递和双 Mock 调用的端到端验收；
+- 核对真实模型的型号、协议和授权后，将 Mock 端点替换为授权服务，验证模型角色方案；
 - 对双模型链路分别记录真实的测试集、准确率、P50/P95 延迟和资源占用。
 
 在获得真实测试记录前，不把上述内容写成已达成的性能指标。
